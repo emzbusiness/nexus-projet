@@ -5,5 +5,5 @@ window.NEXUS_CONFIG = {
   STRIPE_CHECKOUT_URL_PREMIUM_WEB: "https://buy.stripe.com/ton_vrai_lien_premium_web",
   
   // Tu mettras l'URL de ton backend Render ici plus tard :
-  CHAT_BACKEND_URL: "https://ton-bot.onrender.com"
+  CHAT_BACKEND_URL: "https://nexus-projet.onrender.com"
 };
