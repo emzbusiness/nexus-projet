@@ -1,0 +1,150 @@
+// ==========================================================================
+// Schéma Prisma — Architecture Multi-Tenant
+// Un serveur unique, plusieurs entreprises clientes (Tenants) isolées par
+// leur numéro WhatsApp dédié (whatsappPhoneNumber = clé pivot du routage).
+// ==========================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------------------------------------------
+// TENANT (Artisan / Entreprise cliente)
+// --------------------------------------------------------------------------
+enum SubscriptionBadge {
+  essentiel // 99€ / mois
+  premium   // 149€ / mois — débloque trajet/agenda/GPS proactif
+}
+
+enum NotificationPreference {
+  text
+  voice
+}
+
+enum OnboardingStatus {
+  pending_onboarding // numéro provisionné après paiement, en attente du 1er message
+  in_progress        // questionnaire d'accueil en cours
+  completed          // configuration terminée, bot opérationnel
+}
+
+model Tenant {
+  id                     String                  @id @default(uuid())
+
+  // Identité & routage multi-tenant
+  whatsappPhoneNumber    String                  @unique // ex: "whatsapp:+33612345678" — clé d'entrée de TOUS les webhooks
+  customerEmail          String                  @unique // identifiant unique côté paiement (Stripe)
+  companyName            String?
+  activityType           String?                 // ex: "plombier", "électricien", "paysagiste"
+  geographicZone         String?                 // ex: "Lyon et périphérie (30km)"
+
+  // Abonnement / Paiement
+  subscriptionBadge      SubscriptionBadge       @default(essentiel)
+  countryCode            String?                 // ex: "FR" — utilisé pour l'achat du numéro Twilio
+  onboardingStatus       OnboardingStatus        @default(pending_onboarding)
+
+  // Préférences fonctionnelles
+  notificationPreference NotificationPreference  @default(text)
+  locationTrackingActive Boolean                 @default(false)
+
+  // Intégrations tierces (tokens chiffrés au repos — voir security.js)
+  googleBusinessToken     String? // access_token OAuth Google (chiffré AES-256-GCM)
+  googleBusinessRefresh   String? // refresh_token OAuth Google (chiffré AES-256-GCM)
+  googleBusinessLocationId String? // ID de la fiche Google Business Profile
+
+  // Position GPS courante (mise à jour par le module de tracking, badge premium uniquement)
+  lastKnownLat            Float?
+  lastKnownLng            Float?
+  lastLocationUpdateAt    DateTime?
+
+  // État de conversation (machine à états pour l'onboarding / commandes en cours)
+  conversationState       String?  @db.Text // JSON sérialisé : étape courante, buffer de réponses…
+
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  appointments           Appointment[]
+  reviews                Review[]
+
+  @@index([customerEmail])
+  @@index([onboardingStatus])
+}
+
+// --------------------------------------------------------------------------
+// APPOINTMENT (Chantiers / RDV — trajets, ponctualité, badge premium)
+// --------------------------------------------------------------------------
+enum AppointmentStatus {
+  scheduled
+  en_route
+  on_site
+  completed
+  delayed
+  cancelled
+}
+
+model Appointment {
+  id                  String            @id @default(uuid())
+  tenantId            String
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  clientName          String
+  clientPhoneNumber   String?           // pour notification directe du client final en cas de retard
+  address             String
+  latitude            Float?
+  longitude           Float?
+
+  scheduledAt         DateTime
+  estimatedDurationMin Int?             // durée du chantier déclarée par l'artisan
+  estimatedTravelMin  Int?              // temps de trajet estimé (Google Directions) vers le RDV suivant
+
+  status              AppointmentStatus @default(scheduled)
+  delayNotifiedAt     DateTime?
+  recalculatedEta     DateTime?
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  reviews             Review[]
+
+  @@index([tenantId, scheduledAt])
+  @@index([status])
+}
+
+// --------------------------------------------------------------------------
+// REVIEW (Avis clients Google — chasseur d'avis automatisé)
+// --------------------------------------------------------------------------
+enum ReviewStatus {
+  awaiting_customer   // lien d'avis envoyé au client final, en attente de dépôt
+  received            // avis reçu depuis Google, réponse IA générée
+  pending_validation  // réponse envoyée à l'artisan pour validation WhatsApp
+  published           // réponse publiée sur Google
+  rejected            // artisan a refusé la réponse proposée
+}
+
+model Review {
+  id              String        @id @default(uuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  appointmentId   String?
+  appointment     Appointment?  @relation(fields: [appointmentId], references: [id])
+
+  googleReviewId  String?       @unique
+  reviewerName    String?
+  rating          Int?
+  reviewText      String?       @db.Text
+  aiDraftReply    String?       @db.Text
+
+  status          ReviewStatus  @default(awaiting_customer)
+  reviewLinkSentAt DateTime?
+  publishedAt     DateTime?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([tenantId, status])
+}

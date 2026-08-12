@@ -1,0 +1,37 @@
+{
+  "name": "artisan-saas-server",
+  "version": "1.0.0",
+  "description": "Serveur SaaS multi-tenant pour artisans nomades (WhatsApp + IA + GPS + Google Business + Stripe)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema=./prisma/schema.prisma",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "openai": "^4.63.0",
+    "pino": "^9.4.0",
+    "pino-http": "^10.3.0",
+    "sanitize-html": "^2.13.0",
+    "stripe": "^16.12.0",
+    "twilio": "^5.3.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.20.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nexus Pro — Ton secrétariat WhatsApp pour artisans</title>
+<meta name="description" content="Nexus Pro gère tes avis Google, ton planning et ton secrétariat 24/7, directement sur WhatsApp." />
+
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: "#25D366",      // Vert WhatsApp — couleur principale / action
+          ink: "#1A1A1A",        // Gris anthracite très sombre — texte / fond sombre
+          cloud: "#F8FAFC",      // Fond général très clair
+        },
+        fontFamily: {
+          sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .btn-glow { box-shadow: 0 8px 24px -6px rgba(37, 211, 102, 0.45); }
+  .btn-glow:hover { box-shadow: 0 10px 30px -4px rgba(37, 211, 102, 0.6); }
+  .fade-up { animation: fadeUp .6s ease-out both; }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(14px);} to {opacity:1; transform: translateY(0);} }
+  .chat-pop { animation: chatPop .25s ease-out both; }
+  @keyframes chatPop { from { opacity:0; transform: translateY(12px) scale(.97);} to {opacity:1; transform: translateY(0) scale(1);} }
+  .typing-dot { animation: typingBounce 1s infinite ease-in-out; }
+  .typing-dot:nth-child(2) { animation-delay: .15s; }
+  .typing-dot:nth-child(3) { animation-delay: .3s; }
+  @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity:.4; } 30% { transform: translateY(-4px); opacity:1; } }
+</style>
+
+<!-- Configuration centrale (liens Stripe, clé API Gemini côté backend, contacts...) -->
+<script src="./config.js"></script>
+</head>
+
+<body class="bg-cloud text-ink antialiased">
+
+  <!-- ============ BANDEAU PROMO ============ -->
+  <div id="promo-banner" class="fixed top-0 inset-x-0 z-[60] bg-ink text-white text-sm font-medium text-center py-2 px-4">
+    🎁 Code promo <span class="font-bold text-brand" id="promo-code-banner">NEXUS</span> :
+    <span id="promo-label-banner">-50% le premier mois</span> — à saisir lors du paiement
+  </div>
+
+  <!-- ============ NAVIGATION ============ -->
+  <header class="fixed top-9 inset-x-0 z-50 backdrop-blur-md bg-white/80 border-b border-black/5">
+    <nav class="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+      <a href="#top" class="flex items-center gap-2 font-extrabold text-lg">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand text-white">N</span>
+        <span id="nav-product-name">Nexus Pro</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-sm font-medium text-ink/70">
+        <a href="#benefices" class="hover:text-ink transition">Bénéfices</a>
+        <a href="#comment-ca-marche" class="hover:text-ink transition">Comment ça marche</a>
+        <a href="#tarifs" class="hover:text-ink transition">Tarifs</a>
+        <a href="#contact" class="hover:text-ink transition">Contact</a>
+      </div>
+      <a href="#tarifs" class="rounded-full bg-ink text-white text-sm font-semibold px-5 py-2.5 hover:bg-black transition">
+        Voir les offres
+      </a>
+    </nav>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <section id="top" class="relative overflow-hidden pt-44 pb-24 px-6">
+    <div class="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-brand/20 blur-3xl"></div>
+    <div class="absolute top-40 -left-32 h-72 w-72 rounded-full bg-brand/10 blur-3xl"></div>
+
+    <div class="relative max-w-4xl mx-auto text-center fade-up">
+      <span class="inline-flex items-center gap-2 rounded-full bg-brand/10 text-brand font-semibold text-sm px-4 py-1.5 mb-6">
+        🔧 Conçu pour les artisans nomades
+      </span>
+      <h1 class="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
+        Ton secrétariat et tes avis Google
+        <span class="text-brand">pilotés par WhatsApp</span>
+      </h1>
+      <p class="mt-6 text-lg sm:text-xl text-ink/60 max-w-2xl mx-auto">
+        Nexus Pro répond à tes clients, relance tes avis Google 5 étoiles et organise ton planning — automatiquement, 24h/24, sans que tu lèves le petit doigt.
+      </p>
+      <div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="#tarifs" class="btn-glow inline-flex items-center gap-2 rounded-full bg-brand text-white font-semibold px-8 py-4 text-base hover:bg-[#1fb757] transition">
+          Démarrer maintenant
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 9H3a1 1 0 110-2h9.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+        </a>
+        <a href="#comment-ca-marche" class="inline-flex items-center gap-2 rounded-full border border-ink/15 text-ink font-semibold px-8 py-4 text-base hover:bg-ink/5 transition">
+          Découvrir comment ça marche
+        </a>
+      </div>
+      <p class="mt-6 text-sm text-ink/40">Sans engagement · Résiliable à tout moment · Support en français</p>
+    </div>
+
+    <!-- Mockup chat WhatsApp -->
+    <div class="relative max-w-sm mx-auto mt-16 fade-up">
+      <div class="rounded-[2rem] border border-black/10 bg-white shadow-2xl overflow-hidden">
+        <div class="bg-brand text-white px-5 py-4 flex items-center gap-3">
+          <div class="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center font-bold">NP</div>
+          <div>
+            <p class="font-semibold text-sm">Nexus Pro Assistant</p>
+            <p class="text-xs text-white/80">en ligne</p>
+          </div>
+        </div>
+        <div class="p-4 space-y-3 bg-[#ECE5DD] min-h-[220px]">
+          <div class="bg-white rounded-2xl rounded-tl-none px-4 py-2 text-sm max-w-[80%] shadow-sm">
+            Bonjour ! J'ai une fuite sous mon évier, vous êtes dispo demain ?
+          </div>
+          <div class="bg-brand/90 text-white rounded-2xl rounded-tr-none px-4 py-2 text-sm max-w-[85%] ml-auto shadow-sm">
+            Bonjour 👋 Bien sûr ! Je vous propose demain 10h ou 14h. Lequel préférez-vous ?
+          </div>
+          <div class="bg-white rounded-2xl rounded-tl-none px-4 py-2 text-sm max-w-[70%] shadow-sm">
+            10h c'est parfait 👍
+          </div>
+          <div class="bg-brand/90 text-white rounded-2xl rounded-tr-none px-4 py-2 text-sm max-w-[85%] ml-auto shadow-sm">
+            Rendez-vous confirmé ✅ Vous recevrez un rappel automatique.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BÉNÉFICES ============ -->
+  <section id="benefices" class="py-24 px-6 bg-white">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center max-w-2xl mx-auto mb-16">
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Ce que Nexus Pro fait pour toi</h2>
+        <p class="mt-4 text-ink/60 text-lg">Trois problèmes réglés, zéro effort de ton côté.</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        <!-- Bénéfice 1 -->
+        <div class="rounded-2xl border border-black/5 p-8 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+          <div class="h-12 w-12 rounded-xl bg-brand/10 flex items-center justify-center mb-6">
+            <svg class="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Ne rate plus aucun chantier</h3>
+          <p class="text-ink/60 leading-relaxed">Chaque demande client est captée et planifiée en temps réel, même quand tu es sous une baignoire ou au téléphone avec un autre client.</p>
+        </div>
+
+        <!-- Bénéfice 2 -->
+        <div class="rounded-2xl border border-black/5 p-8 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+          <div class="h-12 w-12 rounded-xl bg-brand/10 flex items-center justify-center mb-6">
+            <svg class="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Automatise tes avis Google 5★</h3>
+          <p class="text-ink/60 leading-relaxed">Après chaque intervention, Nexus Pro relance automatiquement ton client pour un avis Google — au bon moment, avec le bon message.</p>
+        </div>
+
+        <!-- Bénéfice 3 -->
+        <div class="rounded-2xl border border-black/5 p-8 hover:shadow-xl hover:-translate-y-1 transition duration-300">
+          <div class="h-12 w-12 rounded-xl bg-brand/10 flex items-center justify-center mb-6">
+            <svg class="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Secrétariat 24/7</h3>
+          <p class="text-ink/60 leading-relaxed">Ton assistant WhatsApp répond, qualifie et rassure tes clients à toute heure — même le week-end, même en pleine intervention.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COMMENT ÇA MARCHE EN DÉTAILS ============ -->
+  <section id="comment-ca-marche" class="py-24 px-6 bg-cloud">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center max-w-2xl mx-auto mb-16">
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Comment ça marche, en détails</h2>
+        <p class="mt-4 text-ink/60 text-lg">Simple à comprendre, simple à utiliser — sans rien changer à ta façon de travailler.</p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8 mb-14">
+        <!-- Point 1 : Transparence -->
+        <div class="rounded-2xl bg-white border border-black/5 p-8">
+          <div class="h-12 w-12 rounded-xl bg-brand/10 flex items-center justify-center mb-6">
+            <svg class="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Transparence totale</h3>
+          <p class="text-ink/60 leading-relaxed">
+            <strong class="text-ink">Ça ne change absolument rien à ta façon de travailler au quotidien.</strong>
+            Tu continues tes chantiers exactement comme avant. La seule différence visible : un simple numéro WhatsApp professionnel affiché sur ton site ou ta fiche Google — c'est tout.
+          </p>
+        </div>
+
+        <!-- Point 2 : Liberté -->
+        <div class="rounded-2xl bg-white border border-black/5 p-8">
+          <div class="h-12 w-12 rounded-xl bg-brand/10 flex items-center justify-center mb-6">
+            <svg class="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Liberté totale de personnalisation</h3>
+          <p class="text-ink/60 leading-relaxed">
+            <strong class="text-ink">Tu paramètres tout, à ton image :</strong> messages d'accueil, ton de réponse, horaires de disponibilité, zones d'intervention, questions posées aux clients avant un devis. Nexus Pro s'adapte à toi, pas l'inverse.
+          </p>
+        </div>
+
+        <!-- Point 3 : Centralisation -->
+        <div class="rounded-2xl bg-white border border-black/5 p-8">
+          <div class="h-12 w-12 rounded-xl bg-brand/10 flex items-center justify-center mb-6">
+            <svg class="h-6 w-6 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6M9 16h6" />
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold mb-3">Tout centralisé sur ton téléphone</h3>
+          <p class="text-ink/60 leading-relaxed">
+            <strong class="text-ink">Toutes tes informations arrivent au même endroit :</strong> nouvelles demandes, rendez-vous confirmés, relances d'avis, suivis clients — directement sur ton WhatsApp perso, sans jongler entre plusieurs applications.
+          </p>
+        </div>
+      </div>
+
+      <!-- Exemple concret -->
+      <div class="rounded-3xl bg-ink text-white p-10 md:p-12">
+        <h3 class="text-2xl font-bold mb-6">Un exemple concret, du premier message au chantier terminé</h3>
+        <ol class="space-y-5">
+          <li class="flex gap-4">
+            <span class="shrink-0 h-8 w-8 rounded-full bg-brand text-white font-bold flex items-center justify-center text-sm">1</span>
+            <p class="text-white/80 pt-1">Un client tape ton numéro WhatsApp affiché sur ton site ou ta fiche Google : <em class="text-white">« Bonjour, j'ai une panne électrique, vous êtes dispo cette semaine ? »</em></p>
+          </li>
+          <li class="flex gap-4">
+            <span class="shrink-0 h-8 w-8 rounded-full bg-brand text-white font-bold flex items-center justify-center text-sm">2</span>
+            <p class="text-white/80 pt-1">Nexus Pro répond immédiatement, pose les bonnes questions (adresse, urgence, type de panne) et propose des créneaux selon ton agenda réel.</p>
+          </li>
+          <li class="flex gap-4">
+            <span class="shrink-0 h-8 w-8 rounded-full bg-brand text-white font-bold flex items-center justify-center text-sm">3</span>
+            <p class="text-white/80 pt-1">Le rendez-vous est confirmé et ajouté à ton planning. Tu reçois une notification claire sur ton téléphone — aucune action requise de ta part.</p>
+          </li>
+          <li class="flex gap-4">
+            <span class="shrink-0 h-8 w-8 rounded-full bg-brand text-white font-bold flex items-center justify-center text-sm">4</span>
+            <p class="text-white/80 pt-1">Tu fais le chantier comme d'habitude, avec tes outils, ta camionnette, ta méthode. Rien ne change dans ton travail sur le terrain.</p>
+          </li>
+          <li class="flex gap-4">
+            <span class="shrink-0 h-8 w-8 rounded-full bg-brand text-white font-bold flex items-center justify-center text-sm">5</span>
+            <p class="text-white/80 pt-1">Une fois l'intervention terminée, Nexus Pro relance automatiquement le client pour lui demander un avis Google 5 étoiles — sans que tu aies besoin de le lui rappeler en personne.</p>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TARIFS ============ -->
+  <section id="tarifs" class="py-24 px-6 bg-white">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center max-w-2xl mx-auto mb-10">
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Une offre simple, pensée pour toi</h2>
+        <p class="mt-4 text-ink/60 text-lg">Choisis la formule adaptée à ton activité. Sans engagement.</p>
+      </div>
+
+      <!-- Encart code promo -->
+      <div class="max-w-xl mx-auto mb-14 rounded-2xl border-2 border-dashed border-brand bg-brand/5 px-6 py-5 text-center">
+        <p class="text-ink font-semibold">
+          🎁 Utilise le code <span class="inline-flex items-center rounded-full bg-brand text-white font-bold px-3 py-1 mx-1" id="promo-code-pricing">NEXUS</span>
+          au moment du paiement Stripe et profite de <span class="text-brand font-bold" id="promo-label-pricing">-50% sur ton premier mois</span>, quelle que soit la formule choisie.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8 items-stretch">
+
+        <!-- ESSENTIEL -->
+        <div class="rounded-3xl bg-white border border-black/5 p-8 flex flex-col">
+          <h3 class="text-lg font-bold text-ink/70 uppercase tracking-wide">Essentiel</h3>
+          <div class="mt-4 flex items-end gap-1">
+            <span class="text-4xl font-extrabold">99€</span>
+            <span class="text-ink/50 font-medium pb-1">/ mois</span>
+          </div>
+          <p class="mt-3 text-ink/60 text-sm">Idéal pour démarrer sur WhatsApp.</p>
+
+          <ul class="mt-6 space-y-3 flex-1 text-sm">
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80">Secrétariat WhatsApp automatisé 24/7</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80">Gestion et relance des avis Google</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80">Prise de rendez-vous automatique</span>
+            </li>
+            <li class="flex items-start gap-3 opacity-40">
+              <svg class="h-5 w-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <span>Assistant trajet & agenda intelligent</span>
+            </li>
+            <li class="flex items-start gap-3 opacity-40">
+              <svg class="h-5 w-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <span>Gestion de site internet & SEO</span>
+            </li>
+          </ul>
+
+          <a id="cta-essentiel" href="#" class="mt-8 inline-flex items-center justify-center rounded-full border-2 border-ink text-ink font-semibold px-6 py-4 hover:bg-ink hover:text-white transition text-sm">
+            S'abonner à Essentiel
+          </a>
+        </div>
+
+        <!-- PREMIUM -->
+        <div class="relative rounded-3xl bg-ink text-white p-8 flex flex-col shadow-2xl">
+          <span class="absolute -top-4 right-8 rounded-full bg-brand text-white text-xs font-bold px-4 py-1.5 uppercase tracking-wide">
+            Le plus choisi
+          </span>
+          <h3 class="text-lg font-bold text-white/70 uppercase tracking-wide">Premium</h3>
+          <div class="mt-4 flex items-end gap-1">
+            <span class="text-4xl font-extrabold">149€</span>
+            <span class="text-white/50 font-medium pb-1">/ mois</span>
+          </div>
+          <p class="mt-3 text-white/60 text-sm">Pour les artisans qui veulent tout automatiser.</p>
+
+          <ul class="mt-6 space-y-3 flex-1 text-sm">
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-white/90">Tout ce qui est inclus dans Essentiel</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-white/90">Assistant trajet & suivi GPS en temps réel</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-white/90">Alertes de ponctualité pour tes clients</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-white/90">Agenda intelligent optimisé par trajet</span>
+            </li>
+            <li class="flex items-start gap-3 opacity-40">
+              <svg class="h-5 w-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <span>Gestion de site internet & SEO</span>
+            </li>
+          </ul>
+
+          <a id="cta-premium" href="#" class="btn-glow mt-8 inline-flex items-center justify-center rounded-full bg-brand text-white font-semibold px-6 py-4 hover:bg-[#1fb757] transition text-sm">
+            S'abonner à Premium
+          </a>
+        </div>
+
+        <!-- PREMIUM + WEB -->
+        <div class="relative rounded-3xl bg-white border-2 border-brand p-8 flex flex-col shadow-xl">
+          <span class="absolute -top-4 right-8 rounded-full bg-ink text-white text-xs font-bold px-4 py-1.5 uppercase tracking-wide">
+            Croissance max
+          </span>
+          <h3 class="text-lg font-bold text-ink/70 uppercase tracking-wide">Premium + Web</h3>
+          <div class="mt-4 flex items-end gap-1">
+            <span class="text-4xl font-extrabold">169€</span>
+            <span class="text-ink/50 font-medium pb-1">/ mois</span>
+          </div>
+          <p class="mt-1 text-brand text-xs font-semibold">Premium + 20€/mois</p>
+          <p class="mt-3 text-ink/60 text-sm">On gère aussi ton site internet, de A à Z.</p>
+
+          <ul class="mt-6 space-y-3 flex-1 text-sm">
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80">Tout ce qui est inclus dans Premium</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80">Ton site internet créé et géré pour toi</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80">Modifications sur simple demande</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="h-5 w-5 text-brand shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <span class="text-ink/80 font-semibold">Optimisation SEO pour être trouvé sur Google</span>
+            </li>
+          </ul>
+
+          <div class="mt-4 rounded-xl bg-brand/10 px-4 py-3 text-xs text-ink/70 leading-relaxed">
+            💡 Un meilleur référencement Google (SEO) = plus de visibilité = plus de demandes de chantiers.
+          </div>
+
+          <a id="cta-premium-web" href="#" class="mt-6 inline-flex items-center justify-center rounded-full bg-brand text-white font-semibold px-6 py-4 hover:bg-[#1fb757] transition text-sm">
+            S'abonner à Premium + Web
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+  <!-- ============ FOCUS IA : TON NOUVEL AGENDA ============ -->
+  <section id="ai-agenda" class="py-20 px-6 bg-brand/5">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight mb-8">
+        "Expert Nexus" : ton nouveau bras droit
+      </h2>
+      </div>
+      <div class="grid md:grid-cols-2 gap-8 items-center bg-white rounded-3xl p-8 border border-brand/20 shadow-lg">
+        <div class="text-left space-y-4">
+          <p class="text-lg text-ink">
+            Ne cherche plus jamais dans tes notes ou ton agenda papier. <strong>Pose directement ta question au bot</strong> sur WhatsApp, comme si tu parlais à ton secrétaire :
+          </p>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-2 text-ink/70">✅ <em>« Ai-je quelque chose de prévu à 14h ? »</em></li>
+            <li class="flex items-center gap-2 text-ink/70">✅ <em>« Quels sont mes chantiers pour demain ? »</em></li>
+            <li class="flex items-center gap-2 text-ink/70">✅ <em>« Est-ce que j'ai une disponibilité jeudi matin ? »</em></li>
+          </ul>
+        </div>
+        <div class="bg-[#ECE5DD] rounded-2xl p-6 shadow-inner">
+          <p class="text-sm text-ink/60 mb-4 font-medium italic text-right">Moi (Artisan)</p>
+          <div class="bg-brand/90 text-white rounded-2xl rounded-tr-none px-4 py-2 text-sm text-left shadow-sm mb-4">
+            Ai-je quelque chose à 14h ?
+          </div>
+          <p class="text-sm text-ink/60 mb-4 font-medium italic text-left">Expert Nexus</p>
+          <div class="bg-white rounded-2xl rounded-tl-none px-4 py-2 text-sm text-left shadow-sm">
+          Oui ! Tu as une intervention chez M. Martin pour une réparation de fuite à 14h.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <!-- ============ CONTACT / FOOTER ============ -->
+  <footer id="contact" class="bg-cloud border-t border-black/5 py-14 px-6">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-2 font-extrabold text-lg">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-brand text-white">N</span>
+        <span id="footer-product-name">Nexus Pro</span>
+      </div>
+      <p class="text-sm text-ink/50 text-center">
+        Une question ? Écris-nous à
+        <a id="footer-email" href="#" class="text-brand font-medium hover:underline">contact.nexuspro.bot@gmail.com</a>.
+      </p>
+      <p class="text-xs text-ink/30">&copy; <span id="year"></span> Nexus Pro. Tous droits réservés.</p>
+    </div>
+  </footer>
+
+  <!-- ============ WIDGET DE CHAT "EXPERT NEXUS" (Gemini 1.5 Flash) ============ -->
+  <div id="nexus-chat-widget" class="fixed bottom-6 right-6 z-[70] flex flex-col items-end gap-3">
+
+    <!-- Fenêtre de chat -->
+    <div id="nexus-chat-window" class="hidden chat-pop w-[92vw] max-w-sm h-[70vh] max-h-[520px] bg-white rounded-2xl shadow-2xl border border-black/10 flex flex-col overflow-hidden">
+      <div class="bg-ink text-white px-5 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-full bg-brand flex items-center justify-center font-bold">N</div>
+          <div>
+            <p class="font-semibold text-sm">Expert Nexus</p>
+            <p class="text-xs text-white/60">Propulsé par Gemini 1.5 Flash</p>
+          </div>
+        </div>
+        <button id="nexus-chat-close" class="text-white/70 hover:text-white text-xl leading-none" aria-label="Fermer le chat">✕</button>
+      </div>
+
+      <div id="nexus-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-[#F8FAFC]">
+        <div class="bg-white rounded-2xl rounded-tl-none px-4 py-2.5 text-sm max-w-[85%] shadow-sm">
+          👋 Bonjour ! Je suis l'Expert Nexus. Pose-moi n'importe quelle question sur Nexus Pro : nos offres, notre fonctionnement, la mise en place... Je réponds en direct !
+        </div>
+      </div>
+
+      <div id="nexus-chat-typing" class="hidden px-4 pb-1">
+        <div class="inline-flex gap-1 bg-white rounded-full px-3 py-2 shadow-sm">
+          <span class="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40"></span>
+          <span class="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40"></span>
+          <span class="typing-dot h-1.5 w-1.5 rounded-full bg-ink/40"></span>
+        </div>
+      </div>
+
+      <form id="nexus-chat-form" class="border-t border-black/5 p-3 flex items-center gap-2 bg-white">
+        <input id="nexus-chat-input" type="text" placeholder="Écris ta question..." autocomplete="off"
+          class="flex-1 rounded-full border border-black/10 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40" />
+        <button type="submit" class="h-10 w-10 shrink-0 rounded-full bg-brand text-white flex items-center justify-center hover:bg-[#1fb757] transition" aria-label="Envoyer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.897 28.897 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" /></svg>
+        </button>
+      </form>
+    </div>
+
+    <!-- Bouton flottant -->
+    <button id="nexus-chat-toggle"
+      class="btn-glow h-16 w-16 rounded-full bg-brand text-white flex items-center justify-center hover:bg-[#1fb757] transition"
+      aria-label="Ouvrir le chat Expert Nexus">
+      <svg id="nexus-chat-icon-open" xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.477 2 2 6.145 2 11.25c0 2.61 1.16 4.976 3.045 6.687-.16 1.36-.62 2.75-1.16 3.79a.5.5 0 00.62.68c1.55-.55 3.24-1.42 4.42-2.24A11.9 11.9 0 0012 20.5c5.523 0 10-4.145 10-9.25S17.523 2 12 2z"/>
+      </svg>
+      <svg id="nexus-chat-icon-close" xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- ============ SCRIPT D'INITIALISATION ============ -->
+  <script>
+    (function () {
+      const cfg = window.NEXUS_CONFIG || {};
+
+      // ----- Liens Stripe -----
+      const essentielBtn = document.getElementById("cta-essentiel");
+      const premiumBtn = document.getElementById("cta-premium");
+      const premiumWebBtn = document.getElementById("cta-premium-web");
+      if (essentielBtn) essentielBtn.href = cfg.STRIPE_CHECKOUT_URL_ESSENTIEL || "#";
+      if (premiumBtn) premiumBtn.href = cfg.STRIPE_CHECKOUT_URL_PREMIUM || "#";
+      if (premiumWebBtn) premiumWebBtn.href = cfg.STRIPE_CHECKOUT_URL_PREMIUM_WEB || "#";
+
+      // Avertissement visuel si les liens Stripe n'ont pas été configurés
+      [essentielBtn, premiumBtn, premiumWebBtn].forEach((btn) => {
+        if (btn && btn.href.includes("YOUR_STRIPE_CHECKOUT_URL")) {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            alert("⚠️ Lien de paiement Stripe non configuré.\nOuvre config.js et remplace le placeholder par ton vrai lien Stripe.");
+          });
+        }
+      });
+
+      // ----- Code promo -----
+      const promoCode = (cfg.PROMO_CODE || "nexus").toUpperCase();
+      const promoLabel = cfg.PROMO_DISCOUNT_LABEL || "-50% le premier mois";
+      document.querySelectorAll("#promo-code-banner, #promo-code-pricing").forEach(el => el.textContent = promoCode);
+      document.querySelectorAll("#promo-label-banner, #promo-label-pricing").forEach(el => el.textContent = promoLabel);
+
+      // ----- Contact (footer) -----
+      const email = document.getElementById("footer-email");
+      if (email) {
+        const addr = cfg.CONTACT_EMAIL || "contact.nexuspro.bot@gmail.com";
+        email.href = "mailto:" + addr;
+        email.textContent = addr;
+      }
+
+      // ----- Nom du produit dynamique -----
+      document.querySelectorAll("#nav-product-name, #footer-product-name").forEach(el => {
+        el.textContent = cfg.PRODUCT_NAME || "Nexus Pro";
+      });
+
+      // ----- Année du footer -----
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      // =========================================================
+      //  WIDGET DE CHAT "EXPERT NEXUS" — propulsé par Gemini 1.5 Flash
+      //  ⚠️ La clé API Gemini ne doit JAMAIS être utilisée ici (front-end).
+      //  Ce script appelle uniquement ton backend (cfg.CHAT_BACKEND_URL),
+      //  qui lui, côté serveur, détient la clé API Gemini en variable
+      //  d'environnement (GEMINI_API_KEY) et interroge Gemini 1.5 Flash.
+      // =========================================================
+      const chatWidget = document.getElementById("nexus-chat-widget");
+      const chatWindow = document.getElementById("nexus-chat-window");
+      const chatToggle = document.getElementById("nexus-chat-toggle");
+      const iconOpen = document.getElementById("nexus-chat-icon-open");
+      const iconClose = document.getElementById("nexus-chat-icon-close");
+      const chatClose = document.getElementById("nexus-chat-close");
+      const chatForm = document.getElementById("nexus-chat-form");
+      const chatInput = document.getElementById("nexus-chat-input");
+      const chatMessages = document.getElementById("nexus-chat-messages");
+      const chatTyping = document.getElementById("nexus-chat-typing");
+
+      // Contexte système envoyé au backend pour cadrer les réponses de Gemini.
+      // Le backend doit l'utiliser comme "system instruction" de l'appel Gemini.
+      const NEXUS_SYSTEM_CONTEXT = `Tu es "Expert Nexus", l'assistant officiel du site Nexus Pro.
+Nexus Pro est un assistant WhatsApp pour artisans (plombiers, électriciens, etc.) qui automatise :
+le secrétariat 24/7, la prise de rendez-vous, la relance des avis Google 5 étoiles, et en option
+l'assistant trajet/GPS/ponctualité (formule Premium) et la gestion complète du site internet + SEO
+(formule Premium + Web à 169€/mois). Offres : Essentiel 99€/mois, Premium 149€/mois, Premium + Web 169€/mois.
+Un code promo "nexus" donne -50% le premier mois, toutes formules confondues. Réponds toujours de façon
+précise, chaleureuse et convaincante, en français, pour aider un artisan à comprendre le service et le
+rassurer sur le fait que cela ne change rien à sa façon de travailler au quotidien.`;
+
+      let chatHistory = [];
+
+      function openChat() {
+        chatWindow.classList.remove("hidden");
+        iconOpen.classList.add("hidden");
+        iconClose.classList.remove("hidden");
+        chatInput.focus();
+      }
+      function closeChat() {
+        chatWindow.classList.add("hidden");
+        iconOpen.classList.remove("hidden");
+        iconClose.classList.add("hidden");
+      }
+      chatToggle.addEventListener("click", () => {
+        chatWindow.classList.contains("hidden") ? openChat() : closeChat();
+      });
+      chatClose.addEventListener("click", closeChat);
+
+      function addMessage(text, from) {
+        const bubble = document.createElement("div");
+        const isUser = from === "user";
+        bubble.className = isUser
+          ? "bg-brand text-white rounded-2xl rounded-tr-none px-4 py-2.5 text-sm max-w-[85%] ml-auto shadow-sm"
+          : "bg-white rounded-2xl rounded-tl-none px-4 py-2.5 text-sm max-w-[85%] shadow-sm";
+        bubble.textContent = text;
+        chatMessages.appendChild(bubble);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      async function askExpertNexus(userMessage) {
+        const backendUrl = cfg.CHAT_BACKEND_URL;
+
+        if (!backendUrl || backendUrl.includes("YOUR_BACKEND_CHAT_ENDPOINT_URL")) {
+          return "⚠️ Le backend de chat (propulsé par Gemini 1.5 Flash) n'est pas encore configuré. Renseigne CHAT_BACKEND_URL dans config.js pour activer les réponses en direct.";
+        }
+
+        try {
+          const response = await fetch(backendUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: userMessage,
+              systemContext: NEXUS_SYSTEM_CONTEXT,
+              history: chatHistory,
+            }),
+          });
+
+          if (!response.ok) throw new Error("Réponse backend invalide (" + response.status + ")");
+
+          const data = await response.json();
+          return data.reply || "Désolé, je n'ai pas pu générer de réponse pour le moment.";
+        } catch (err) {
+          console.error("Erreur chat Expert Nexus:", err);
+          return "😕 Une erreur est survenue en contactant l'Expert Nexus. Réessaie dans un instant, ou écris-nous directement à " + (cfg.CONTACT_EMAIL || "contact.nexuspro.bot@gmail.com") + ".";
+        }
+      }
+
+      chatForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const message = chatInput.value.trim();
+        if (!message) return;
+
+        addMessage(message, "user");
+        chatHistory.push({ role: "user", content: message });
+        chatInput.value = "";
+        chatTyping.classList.remove("hidden");
+
+        const reply = await askExpertNexus(message);
+
+        chatTyping.classList.add("hidden");
+        addMessage(reply, "bot");
+        chatHistory.push({ role: "assistant", content: reply });
+      });
+    })();
+  </script>
+
+</body>
+</html>

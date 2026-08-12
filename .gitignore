@@ -1,0 +1,25 @@
+# Secrets — ne jamais committer
+.env
+.env.*
+!.env.example
+
+# Dépendances
+node_modules/
+
+# Build / logs
+dist/
+logs/
+*.log
+npm-debug.log*
+
+# Prisma
+prisma/migrations/dev.db
+
+# Système
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+config.js
