@@ -29,6 +29,16 @@ import { startLocationTrackerJob } from './src/jobs/locationTracker.job.js';
 import { startReviewRequestJob } from './src/jobs/reviewRequest.job.js';
 import { startReviewValidationJob } from './src/jobs/reviewValidation.job.js';
 import { logger } from './src/utils/logger.js';
+import express from 'express';
+import path from 'path';
+
+// 1. Indiquer à Express d'exposer les fichiers du dossier frontend
+app.use(express.static(path.join(process.cwd(), 'frontend')));
+
+// 2. Rediriger la route racine "/" vers le fichier index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'frontend', 'index.html'));
+});
 
 // --- 1) Validation des secrets au démarrage (fail-fast) -------------------
 assertEnvironment();
