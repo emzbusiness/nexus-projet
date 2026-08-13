@@ -17,10 +17,16 @@ import {
 } from '../services/tenant.service.js';
 import { startOnboarding, handleOnboardingReply } from '../services/onboarding.service.js';
 import { sanitizeUserMessage } from '../utils/sanitize.js';
-import { detectSettingsIntent, qualifyLead, generateSeoPostFromJobPhoto, transcribeVoiceNote } from '../services/openai.service.js';
+import { 
+  detectSettingsIntent, 
+  qualifyLead, 
+  generateSeoPostFromJobPhoto, 
+  transcribeVoiceNote 
+} from '../services/gemini.service.js'; // <-- Modifié pour repointer vers Gemini
 import { applySettingsIntent } from '../services/intent.service.js';
 import { publishBusinessProfilePost } from '../services/google.service.js';
 import { sendWhatsAppMessage } from '../services/twilio.service.js';
+// import { makeOutboundCall } from '../services/twilio.service.js'; // <-- À décommenter quand ta fonction d'appel sera prête
 import { handleAppointmentDurationReply, handleDelayConfirmationReply } from '../services/appointment.service.js';
 import { handleReviewValidationReply } from '../jobs/reviewValidation.job.js';
 import { logger } from '../utils/logger.js';
@@ -40,11 +46,8 @@ whatsappWebhookRouter.post('/whatsapp', async (req, res) => {
 });
 
 async function processIncomingWhatsAppMessage(body) {
-  // Le "From" WhatsApp (client final ou artisan) et le "To" (notre numéro
-  // Twilio dédié à CE tenant) sont la base du routage multi-tenant : c'est
-  // "To" qui identifie de façon unique l'entreprise cliente concernée.
-  const fromNumber = body.From; // ex: "whatsapp:+33612345678"
-  const toNumber = body.To; // ex: "whatsapp:+14155238886" (numéro dédié du tenant)
+  const fromNumber = body.From; 
+  const toNumber = body.To; 
   const rawBody = body.Body || '';
   const numMedia = parseInt(body.NumMedia || '0', 10);
 
@@ -58,20 +61,13 @@ async function processIncomingWhatsAppMessage(body) {
     return;
   }
 
-  // Le "From" de l'expéditeur doit correspondre au tenant lui-même pour
-  // toute la logique de configuration/onboarding. Si un client final écrit
-  // sur ce même numéro (ex: réponse à une demande d'avis), on le route
-  // différemment (non couvert dans ce court-circuit — cf. logique métier
-  // spécifique aux avis/prospects, distincte de la config artisan).
   const isFromArtisanHimself = fromNumber === tenant.whatsappPhoneNumber || tenant.whatsappPhoneNumber == null;
 
   // --- 2) Onboarding : numéro fraîchement provisionné après paiement ----
   if (tenant.onboardingStatus === 'pending_onboarding') {
-    // Premier message reçu sur ce numéro → on associe désormais ce
-    // "From" comme étant le numéro personnel de l'artisan.
     tenant = await prisma.tenant.update({
       where: { id: tenant.id },
-      data: { whatsappPhoneNumber: toNumber }, // le numéro dédié reste la clé de routage stable
+      data: { whatsappPhoneNumber: toNumber },
     });
     const firstPrompt = await startOnboarding(tenant);
     await sendWhatsAppMessage(fromNumber, firstPrompt);
@@ -118,10 +114,19 @@ async function processIncomingWhatsAppMessage(body) {
   }
 
   // --- 5) Traitement multimodal : photo de chantier + légende (Module 2) -
-  if (numMedia > 0 && isFromArtisanHimself) {
+  if (numMedia > 0 && isFromArtisanHimself && body.MediaContentType0?.startsWith('image')) {
     const mediaUrl = body.MediaUrl0;
+    const mimeType = body.MediaContentType0;
+
+    // NOUVEAU : On télécharge l'image en Buffer pour Gemini
+    const imageResponse = await axios.get(mediaUrl, {
+      responseType: 'arraybuffer',
+      auth: { username: process.env.TWILIO_ACCOUNT_SID, password: process.env.TWILIO_AUTH_TOKEN },
+    });
+
     const seoPost = await generateSeoPostFromJobPhoto({
-      imageUrl: mediaUrl,
+      imageBuffer: Buffer.from(imageResponse.data), // Passe le Buffer à Gemini
+      mimeType: mimeType,
       sanitizedCaption: sanitizedMessage,
       activityType: tenant.activityType,
       geographicZone: tenant.geographicZone,
@@ -141,19 +146,40 @@ async function processIncomingWhatsAppMessage(body) {
       responseType: 'arraybuffer',
       auth: { username: process.env.TWILIO_ACCOUNT_SID, password: process.env.TWILIO_AUTH_TOKEN },
     });
-    const transcript = await transcribeVoiceNote(Buffer.from(audioResponse.data));
+    // NOUVEAU : On passe aussi le mimeType à Gemini
+    const transcript = await transcribeVoiceNote(Buffer.from(audioResponse.data), body.MediaContentType0);
     return processIncomingWhatsAppMessage({ ...body, Body: transcript, NumMedia: '0' });
   }
 
   // --- 7) Par défaut : qualification de prospect (Module 3) -------------
   if (!isFromArtisanHimself && sanitizedMessage) {
     const qualification = await qualifyLead(sanitizedMessage);
+    
+    // 7.1 - Toujours envoyer la notification texte sur WhatsApp
     await sendWhatsAppMessage(
       tenant.whatsappPhoneNumber,
       `🔔 Nouveau prospect [${qualification.urgency.toUpperCase()} - ${qualification.type}]\n` +
-        `De: ${fromNumber}\n` +
-        `Résumé: ${qualification.summary}`
+      `De: ${fromNumber}\n` +
+      `Résumé: ${qualification.summary}`
     );
+
+    // 7.2 - NOUVEAU : Gestion intelligente des appels selon les préférences BDD
+    let shouldTriggerCall = false;
+
+    if (tenant.callPreference === 'FIRST_CONTACT') {
+      shouldTriggerCall = true;
+    } else if (tenant.callPreference === 'URGENCY_ONLY' && qualification.urgency === 'haute') {
+      shouldTriggerCall = true;
+    }
+    // Si 'WHATSAPP_ONLY' ou 'NEW_BOOKING_ONLY', on ne fait rien à ce stade de premier contact.
+
+    if (shouldTriggerCall) {
+      logger.info({ tenantId: tenant.id }, 'Déclenchement d\'un appel sortant (Règles de préférence d\'appel respectées).');
+      
+      // EXEMPLE DE CODE À ADAPTER selon ta fonction d'appel dans twilio.service.js :
+      // await makeOutboundCall(tenant.whatsappPhoneNumber, `Bonjour patron. Nouveau prospect au ${fromNumber}. Sujet : ${qualification.summary}`);
+    }
+
     return;
   }
 
