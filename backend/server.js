@@ -16,6 +16,7 @@
 // ==========================================================================
 import 'dotenv/config';
 import express from 'express';
+import { GoogleGenerativeAI } from '@google/generative-ai'; 
 import { assertEnvironment } from './src/config/security.js';
 import { connectDatabase } from './src/config/database.js';
 import { helmetMiddleware, errorHandler, notFoundHandler } from './src/middlewares/security.middleware.js';
