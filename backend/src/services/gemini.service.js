@@ -11,7 +11,7 @@
 // Toute entrée utilisateur DOIT être passée par sanitizeUserMessage() avant
 // d'arriver ici afin de neutraliser le prompt injection.
 // ==========================================================================
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { wrapAsUntrustedInput } from '../utils/sanitize.js';
 import { logger } from '../utils/logger.js';
 
