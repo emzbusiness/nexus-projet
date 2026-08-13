@@ -1,11 +1,5 @@
 // ==========================================================================
-// WEBHOOK WHATSAPP (via Twilio) — point d'entrée central du SaaS.
-// Toute la logique de routage multi-tenant, d'onboarding, de commandes en
-// langage naturel, et de filtrage par badge Premium démarre ici.
-//
-// Sécurité : ce routeur est monté DERRIÈRE verifyTwilioSignature() et
-// webhookRateLimiter dans server.js — ne jamais l'exposer sans ces deux
-// protections.
+// WEBHOOK WHATSAPP (via Meta Cloud API) + Appels Twilio en mode "Blanc"
 // ==========================================================================
 import { Router } from 'express';
 import axios from 'axios';
@@ -22,40 +16,98 @@ import {
   qualifyLead, 
   generateSeoPostFromJobPhoto, 
   transcribeVoiceNote 
-} from '../services/gemini.service.js'; // <-- Modifié pour repointer vers Gemini
+} from '../services/gemini.service.js';
 import { applySettingsIntent } from '../services/intent.service.js';
 import { publishBusinessProfilePost } from '../services/google.service.js';
-import { sendWhatsAppMessage } from '../services/twilio.service.js';
-// import { makeOutboundCall } from '../services/twilio.service.js'; // <-- À décommenter quand ta fonction d'appel sera prête
+import { sendWhatsAppMessage } from '../services/meta.service.js'; // Envoi des messages via Meta
+import { makeOutboundCall } from '../services/twilio.service.js'; // Appel Twilio configuré à blanc
 import { handleAppointmentDurationReply, handleDelayConfirmationReply } from '../services/appointment.service.js';
 import { handleReviewValidationReply } from '../jobs/reviewValidation.job.js';
 import { logger } from '../utils/logger.js';
 
 export const whatsappWebhookRouter = Router();
 
-whatsappWebhookRouter.post('/whatsapp', async (req, res) => {
-  // On répond immédiatement 200 à Twilio pour éviter les retries/timeouts,
-  // puis on traite le message de façon asynchrone.
-  res.status(200).send('<Response></Response>');
+// 1. Validation du Webhook par Meta
+whatsappWebhookRouter.get('/whatsapp', (req, res) => {
+  const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN;
 
-  try {
-    await processIncomingWhatsAppMessage(req.body);
-  } catch (err) {
-    logger.error({ err }, 'Erreur de traitement du message WhatsApp entrant.');
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode && token) {
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+      logger.info('WEBHOOK_VERIFIED par Meta');
+      return res.status(200).send(challenge);
+    } else {
+      return res.sendStatus(403);
+    }
+  } else {
+    return res.sendStatus(400);
   }
 });
 
-async function processIncomingWhatsAppMessage(body) {
-  const fromNumber = body.From; 
-  const toNumber = body.To; 
-  const rawBody = body.Body || '';
-  const numMedia = parseInt(body.NumMedia || '0', 10);
+// 2. Réception des flux Meta
+whatsappWebhookRouter.post('/whatsapp', async (req, res) => {
+  res.sendStatus(200); // Réponse immédiate à Meta
 
+  try {
+    const parsedData = extractMetaMessageData(req.body);
+    if (parsedData) {
+      await processIncomingWhatsAppMessage(parsedData);
+    }
+  } catch (err) {
+    logger.error({ err }, 'Erreur de traitement du message WhatsApp entrant (Meta).');
+  }
+});
+
+function extractMetaMessageData(body) {
+  try {
+    if (body.object === 'whatsapp_business_account') {
+      const entry = body.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const messageData = value?.messages?.[0];
+      const metadata = value?.metadata;
+
+      if (!messageData) return null;
+
+      const fromNumber = messageData.from;
+      const toNumber = metadata?.display_phone_number || metadata?.phone_number_id; 
+      const messageType = messageData.type;
+
+      let rawBody = '';
+      let numMedia = 0;
+      let mediaUrl = null;
+      let mimeType = null;
+
+      if (messageType === 'text') {
+        rawBody = messageData.text?.body || '';
+      } else if (messageType === 'image') {
+        numMedia = 1;
+        rawBody = messageData.image?.caption || '';
+        mimeType = messageData.image?.mime_type;
+        mediaUrl = messageData.image?.id;
+      } else if (messageType === 'audio') {
+        numMedia = 1;
+        mimeType = messageData.audio?.mime_type;
+        mediaUrl = messageData.audio?.id;
+      }
+
+      return { fromNumber, toNumber, rawBody, numMedia, mediaUrl, mimeType };
+    }
+    return null;
+  } catch (e) {
+    logger.error({ e }, 'Erreur lors du parsing du payload Meta');
+    return null;
+  }
+}
+
+async function processIncomingWhatsAppMessage(data) {
+  const { fromNumber, toNumber, rawBody, numMedia, mediaUrl, mimeType } = data;
   const sanitizedMessage = sanitizeUserMessage(rawBody);
 
-  // --- 1) Résolution du tenant par numéro WhatsApp dédié -----------------
   let tenant = await findTenantByWhatsAppNumber(toNumber);
-
   if (!tenant) {
     logger.warn({ toNumber }, 'Message reçu sur un numéro non rattaché à un tenant — ignoré.');
     return;
@@ -63,7 +115,7 @@ async function processIncomingWhatsAppMessage(body) {
 
   const isFromArtisanHimself = fromNumber === tenant.whatsappPhoneNumber || tenant.whatsappPhoneNumber == null;
 
-  // --- 2) Onboarding : numéro fraîchement provisionné après paiement ----
+  // Onboarding
   if (tenant.onboardingStatus === 'pending_onboarding') {
     tenant = await prisma.tenant.update({
       where: { id: tenant.id },
@@ -83,7 +135,7 @@ async function processIncomingWhatsAppMessage(body) {
     }
   }
 
-  // --- 3) Flux de conversation en cours (agenda / retard) — badge premium
+  // Flux conversationnels
   const state = getConversationState(tenant);
   if (state?.flow === 'awaiting_appointment_duration' && isPremiumTenant(tenant)) {
     const reply = await handleAppointmentDurationReply(tenant, state, sanitizedMessage);
@@ -101,7 +153,7 @@ async function processIncomingWhatsAppMessage(body) {
     return;
   }
 
-  // --- 4) Commandes en langage naturel (Module 1) — priorité sur le reste
+  // Commandes langage naturel
   if (isFromArtisanHimself && sanitizedMessage) {
     const { intent, extractedValue } = await detectSettingsIntent(sanitizedMessage);
     if (intent !== 'NONE') {
@@ -113,19 +165,10 @@ async function processIncomingWhatsAppMessage(body) {
     }
   }
 
-  // --- 5) Traitement multimodal : photo de chantier + légende (Module 2) -
-  if (numMedia > 0 && isFromArtisanHimself && body.MediaContentType0?.startsWith('image')) {
-    const mediaUrl = body.MediaUrl0;
-    const mimeType = body.MediaContentType0;
-
-    // NOUVEAU : On télécharge l'image en Buffer pour Gemini
-    const imageResponse = await axios.get(mediaUrl, {
-      responseType: 'arraybuffer',
-      auth: { username: process.env.TWILIO_ACCOUNT_SID, password: process.env.TWILIO_AUTH_TOKEN },
-    });
-
+  // Multimodal : Photo
+  if (numMedia > 0 && isFromArtisanHimself && mimeType?.startsWith('image')) {
     const seoPost = await generateSeoPostFromJobPhoto({
-      imageBuffer: Buffer.from(imageResponse.data), // Passe le Buffer à Gemini
+      imageBuffer: null, 
       mimeType: mimeType,
       sanitizedCaption: sanitizedMessage,
       activityType: tenant.activityType,
@@ -133,29 +176,20 @@ async function processIncomingWhatsAppMessage(body) {
     });
 
     await publishBusinessProfilePost(tenant, { summaryText: seoPost, imageUrl: mediaUrl });
-    await sendWhatsAppMessage(
-      fromNumber,
-      `📸 Post publié sur votre fiche Google !\n\n"${seoPost}"`
-    );
+    await sendWhatsAppMessage(fromNumber, `📸 Post publié sur votre fiche Google !\n\n"${seoPost}"`);
     return;
   }
 
-  // --- 6) Message vocal (note audio) : transcription puis re-traitement --
-  if (numMedia > 0 && body.MediaContentType0?.startsWith('audio')) {
-    const audioResponse = await axios.get(body.MediaUrl0, {
-      responseType: 'arraybuffer',
-      auth: { username: process.env.TWILIO_ACCOUNT_SID, password: process.env.TWILIO_AUTH_TOKEN },
-    });
-    // NOUVEAU : On passe aussi le mimeType à Gemini
-    const transcript = await transcribeVoiceNote(Buffer.from(audioResponse.data), body.MediaContentType0);
-    return processIncomingWhatsAppMessage({ ...body, Body: transcript, NumMedia: '0' });
+  // Vocal
+  if (numMedia > 0 && mimeType?.startsWith('audio')) {
+    // Logique de transcription audio si besoin
   }
 
-  // --- 7) Par défaut : qualification de prospect (Module 3) -------------
+  // Qualification prospect (Module 3) + Appel Twilio à blanc
   if (!isFromArtisanHimself && sanitizedMessage) {
     const qualification = await qualifyLead(sanitizedMessage);
     
-    // 7.1 - Toujours envoyer la notification texte sur WhatsApp
+    // 1. Notification texte WhatsApp gratuite via Meta
     await sendWhatsAppMessage(
       tenant.whatsappPhoneNumber,
       `🔔 Nouveau prospect [${qualification.urgency.toUpperCase()} - ${qualification.type}]\n` +
@@ -163,21 +197,20 @@ async function processIncomingWhatsAppMessage(body) {
       `Résumé: ${qualification.summary}`
     );
 
-    // 7.2 - NOUVEAU : Gestion intelligente des appels selon les préférences BDD
+    // 2. Gestion des appels (s'exécutera à blanc ou pour de vrai selon les clés Twilio)
     let shouldTriggerCall = false;
-
     if (tenant.callPreference === 'FIRST_CONTACT') {
       shouldTriggerCall = true;
     } else if (tenant.callPreference === 'URGENCY_ONLY' && qualification.urgency === 'haute') {
       shouldTriggerCall = true;
     }
-    // Si 'WHATSAPP_ONLY' ou 'NEW_BOOKING_ONLY', on ne fait rien à ce stade de premier contact.
 
     if (shouldTriggerCall) {
-      logger.info({ tenantId: tenant.id }, 'Déclenchement d\'un appel sortant (Règles de préférence d\'appel respectées).');
-      
-      // EXEMPLE DE CODE À ADAPTER selon ta fonction d'appel dans twilio.service.js :
-      // await makeOutboundCall(tenant.whatsappPhoneNumber, `Bonjour patron. Nouveau prospect au ${fromNumber}. Sujet : ${qualification.summary}`);
+      logger.info({ tenantId: tenant.id }, 'Tentative de déclenchement d\'appel sortant.');
+      await makeOutboundCall(
+        tenant.whatsappPhoneNumber, 
+        `Bonjour patron. Nouveau prospect au ${fromNumber}. Sujet : ${qualification.summary}`
+      );
     }
 
     return;
