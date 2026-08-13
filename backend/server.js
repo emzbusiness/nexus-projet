@@ -39,10 +39,10 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1); // nécessaire derrière un proxy/tunnel (ngrok, load balancer) pour un rate-limit par IP correct
 
-app.use(express.static(path.join(process.cwd(), 'frontend')));
+app.use(express.static(path.join(process.cwd(), '../frontend')));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(process.cwd(), 'frontend', 'index.html'));
+  res.sendFile(path.join(process.cwd(), '../frontend', 'index.html'));
 });
 
 // --- 2) Sécurité HTTP globale ----------------------------------------------
