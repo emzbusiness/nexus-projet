@@ -7,7 +7,7 @@ import cron from 'node-cron';
 import { prisma } from '../config/database.js';
 import { fetchRecentReviews, publishReviewReply } from '../services/google.service.js';
 import { generateReviewReply } from '../services/gemini.service.js';
-import { sendWhatsAppMessage } from '../services/twilio.service.js';
+import { sendWhatsAppMessage } from '../services/meta.service.js';
 import { setConversationState } from '../services/tenant.service.js';
 import { logger } from '../utils/logger.js';
 
