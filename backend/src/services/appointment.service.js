@@ -6,7 +6,8 @@
 // ==========================================================================
 import { prisma } from '../config/database.js';
 import { setConversationState, isPremiumTenant } from './tenant.service.js';
-import { sendWhatsAppMessage, sendWhatsAppMedia, triggerVoiceAlertCall } from './twilio.service.js';
+import { sendWhatsAppMessage } from './meta.service.js';
+import { triggerVoiceAlertCall } from './twilio.service.js';
 import { computeTravelTimeMinutes, isDelayImminent, computeRecalculatedEta } from './location.service.js';
 import { logger } from '../utils/logger.js';
 
